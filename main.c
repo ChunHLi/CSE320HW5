@@ -12,9 +12,9 @@ void *thread_func(void *vargp){
 	char* id;
 	sprintf(id, "%d", *myid);
 	int virt_len = 0;
-	int* virt_addr;
-	int* pt_1;
-	int* pt_2;
+	int virt_addr[256];
+	int* pt_1[256];
+	int* pt_2[256];
 	int fifo_server;
 	int fifo_client;
 	char *src_server;
@@ -49,7 +49,6 @@ void *thread_func(void *vargp){
                 args[i] = NULL;
 		if (strcmp(args[0],"kill")==0){
 			writ = "kill_succ_";
-			write(fifo_client,writ,10*sizeof(char));
 			printf("Process Killed\n");
 			i -= 1;
                 	while (i >= 0){
@@ -57,15 +56,16 @@ void *thread_func(void *vargp){
                         	i -= 1;
 			}
 			free(buf);
+			write(fifo_client,writ,10*sizeof(char));
 			goto kill;
                 } else if (strcmp(args[0],"memo")==0){
 			writ = "memo_succ_";
-			write(fifo_client,writ,10*sizeof(char));
 			printf("\nAddresses within the process %s:\n", id);
 			int m;
 			for (m=0; m<virt_len ;m++){
 				printf("%#08x\n",virt_addr[m]);
 			}
+			write(fifo_client,writ,10*sizeof(char));
 		} else if (strcmp(args[0],"allo")==0){
 			virt_len += 1;
 		} else if (strcmp(args[0],"read")==0){
@@ -172,7 +172,6 @@ int main(int argc, char** argv){
 								exit(-1);
 							}
 							write(fifo_server, "kill",4*sizeof(char));
-							sleep(10);
 							fifo_client = open(src_client,O_RDWR);
 							if (fifo_client < 0){
 								printf("Error in opening file\n");
@@ -210,7 +209,6 @@ int main(int argc, char** argv){
                                                                 exit(-1);
                                                         }
                                                         write(fifo_server, "memo",4*sizeof(char));
-							sleep(10);
                                                         fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
@@ -248,7 +246,6 @@ int main(int argc, char** argv){
                                                                 exit(-1);
                                                         }
                                                         write(fifo_server, "allo",4*sizeof(char));
-							sleep(10);
                                                         fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
@@ -289,7 +286,6 @@ int main(int argc, char** argv){
 							char* virt_addrr = args[2];
 							strcat(cmdr, virt_addrr);
                                                         write(fifo_server, cmdr,strlen(cmdr)*sizeof(char));
-							sleep(10);
                                                         fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
@@ -332,7 +328,6 @@ int main(int argc, char** argv){
 							strcat(cmdw, tmp);
 							strcat(cmdw, value);
                                                         write(fifo_server, cmdw,strlen(cmdw)*sizeof(char));
-							sleep(10);
                                                         fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
