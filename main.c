@@ -7,14 +7,71 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+unsigned int cse320_malloc(int pt_1[64], int pt_2[64],char* myid){
+	char *src_server = "emu_server";
+	char *src_client = "emu_client";
+	char *allo = "allo,";
+	char *buf;
+	strcat(allo,myid);
+	if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
+		printf("Thread does not exist\n");
+		exit(-1);
+        } else {
+		int emu_server = open(src_server,O_RDWR);
+                if (emu_server < 0){
+			printf("Error in opening file\n");
+			exit(-1);
+		}
+		write(emu_server,allo,6*sizeof(char));
+		sleep(10);
+                int emu_client = open(src_client,O_RDWR);
+		if (emu_client < 0){
+			printf("Error in opening file\n");
+			exit(-1);
+                }
+		struct stat buffr;
+                fstat(emu_client, &buffr);
+                int size = buffr.st_size;
+                buf = malloc(size*sizeof(char));
+                read(emu_client, buf, size*sizeof(char));
+		if (strcmp(buf,"error, address out of range")==0 || strcmp(buf,"error, address is not aligned")){
+			printf("%s\n",buf);
+			return -1;
+		}
+		int physAddr = atoi(buf);
+		int i = 0;
+		for (i; i < 64 ;i++){
+			if (pt_2[i] < 512){
+				break;
+			}
+		}
+		pt_2[i] = (unsigned int)(512 + physAddr);
+		int j = 0;
+		for (j; j < 64; j++){
+			if (pt_1[j] < 512){
+				break;
+			}
+		}
+		pt_1[j] = (unsigned int)(512 + i);
+		unsigned int pt1 = pt_1[j];
+		pt1 = pt1 << 22;
+		unsigned int pt2 = pt_2[i];
+		pt2 = pt2 << 12;
+		unsigned int va = pt1 | pt2;
+                free(buf);
+		return va;                        
+	}
+	return -1;
+}
+
 void *thread_func(void *vargp){
 	int *myid = (int *)vargp;
 	char* id;
 	sprintf(id, "%d", *myid);
 	int virt_len = 0;
-	int virt_addr[256];
-	int* pt_1[256];
-	int* pt_2[256];
+	unsigned int virt_addr[64];
+	unsigned int pt_1[64];
+	unsigned int pt_2[64];
 	int fifo_server;
 	int fifo_client;
 	char *src_server;
@@ -67,7 +124,11 @@ void *thread_func(void *vargp){
 			}
 			write(fifo_client,writ,10*sizeof(char));
 		} else if (strcmp(args[0],"allo")==0){
+			writ = "allo_succ_";
+			printf("Allocated\n");
+			virt_addr[virt_len] = cse320_malloc(pt_1,pt_2,id);
 			virt_len += 1;
+			write(fifo_client,writ,10*sizeof(char));
 		} else if (strcmp(args[0],"read")==0){
 		} else if (strcmp(args[0],"write")==0){
 		} else {
@@ -99,6 +160,16 @@ int main(int argc, char** argv){
 		char *src_client;
 		char *tid;
 		char *buf;
+		int emu_server = mkfifo("emu_server",S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+		if (emu_server < 0) {
+			printf("Unable to create fifo to emulated mem\n");
+			exit(-1);
+		}
+		int emu_client = mkfifo("emu_client",S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+		if (emu_client < 0) {
+			printf("Unable to create fifo to emulated mem\n");
+			exit(-1);
+		}
 		do {
 			
 			char** args;
@@ -172,6 +243,7 @@ int main(int argc, char** argv){
 								exit(-1);
 							}
 							write(fifo_server, "kill",4*sizeof(char));
+							sleep(10);
 							fifo_client = open(src_client,O_RDWR);
 							if (fifo_client < 0){
 								printf("Error in opening file\n");
@@ -209,7 +281,8 @@ int main(int argc, char** argv){
                                                                 exit(-1);
                                                         }
                                                         write(fifo_server, "memo",4*sizeof(char));
-                                                        fifo_client = open(src_client,O_RDWR);
+                                                        sleep(10);
+							fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
                                                                 exit(-1);
@@ -231,8 +304,7 @@ int main(int argc, char** argv){
 				} else if ( strcmp(args[0],"allocate") == 0){
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
-                                        } else {
-                                                src_server = "fifo_server_";
+
                                                 src_client = "fifo_client_";
                                                 tid = args[1];
                                                 strcat(src_server,tid);
@@ -246,7 +318,8 @@ int main(int argc, char** argv){
                                                                 exit(-1);
                                                         }
                                                         write(fifo_server, "allo",4*sizeof(char));
-                                                        fifo_client = open(src_client,O_RDWR);
+                                                        sleep(10);
+							fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
                                                                 exit(-1);
@@ -286,7 +359,8 @@ int main(int argc, char** argv){
 							char* virt_addrr = args[2];
 							strcat(cmdr, virt_addrr);
                                                         write(fifo_server, cmdr,strlen(cmdr)*sizeof(char));
-                                                        fifo_client = open(src_client,O_RDWR);
+                                                        sleep(10);
+							fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
                                                                 exit(-1);
@@ -328,7 +402,8 @@ int main(int argc, char** argv){
 							strcat(cmdw, tmp);
 							strcat(cmdw, value);
                                                         write(fifo_server, cmdw,strlen(cmdw)*sizeof(char));
-                                                        fifo_client = open(src_client,O_RDWR);
+                                                        sleep(10);
+							fifo_client = open(src_client,O_RDWR);
                                                         if (fifo_client < 0){
                                                                 printf("Error in opening file\n");
                                                                 exit(-1);
