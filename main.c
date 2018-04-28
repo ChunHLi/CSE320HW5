@@ -96,7 +96,6 @@ void *thread_func(void *vargp){
 	char *writ;
 	char** args;	
 	while (1) {
-		
 		fifo_server = open(src_server,O_RDWR);
 		if (fifo_server<0) {
 			printf("Error opening file\n");
@@ -124,6 +123,10 @@ void *thread_func(void *vargp){
 			}
 			free(buf);
 			write(fifo_client,writ,10*sizeof(char));
+			close(fifo_server);
+        		close(fifo_client);
+        		close(emu_server);
+        		close(emu_client);
 			goto kill;
                 } else if (strcmp(args[0],"memo")==0){
 			writ = "memo_succ_";
@@ -150,8 +153,8 @@ void *thread_func(void *vargp){
 			unsigned long pa = cse320_virt_to_phys(va);
 			if (pa > 0xFFFFF000){
 			} else {
-				if (pa < *myid * 256 || pa >= *myid * 256){
-					printf("Invalid process virtual address; address out of range");
+				if (pa < *myid * 256 || pa >= (*myid + 1)* 256){
+					printf("error,address out of range");
 					writ = "NULL";
 					write(fifo_client,writ,4*sizeof(char));
 				} else {
@@ -187,8 +190,8 @@ void *thread_func(void *vargp){
                         unsigned long pa = cse320_virt_to_phys(va);
                         if (pa > 0xFFFFF000){
                         } else {
-                                if (pa < *myid * 256 || pa >= *myid * 256){
-                                        printf("Invalid process virtual address; address out of range");
+                                if (pa < *myid * 256 || pa >= (*myid + 1) * 256){
+                                        printf("error,address out of range");
                                         writ = "writ_fail_";
                                         write(fifo_client,writ,10*sizeof(char));
                                 } else {
@@ -230,36 +233,35 @@ void *thread_func(void *vargp){
                         i -= 1;
                 }
 		close(fifo_server);
-		close(fifo_client);
-		close(emu_server);
-		close(emu_client);	
-	}
+        	close(fifo_client);
+        	close(emu_server);
+        	close(emu_client);
+	}	
 	kill:
-		pthread_exit(NULL);
-	
-		
+		pthread_exit(NULL);		
 }
 
 int main(int argc, char** argv){
 	if (argc != 1){
 		printf("Invalid number of arguments (expected 1)\n");
+		return -1;
 	} else {
 		int status = 1;
 		char str[255];
 		pthread_t processes[4];
 		int fifo_server = -1;
 		int fifo_client = -1;
+		char *src_emu_server = "emu_server";
+		char *src_emu_client = "emu_client";
 		char *tid;
 		char *buf;
-		int emu_server = mkfifo("emu_server",S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+		int emu_server = mkfifo(src_emu_server,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 		if (emu_server < 0) {
-			printf("Unable to create fifo to emulated mem\n");
-			exit(-1);
+			printf("Unable to create fifo to emulated mem, may already exists\n");
 		}
-		int emu_client = mkfifo("emu_client",S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+		int emu_client = mkfifo(src_emu_client,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 		if (emu_client < 0) {
-			printf("Unable to create fifo to emulated mem\n");
-			exit(-1);
+			printf("Unable to create fifo to emulated mem, may already exists\n");
 		}
 		do {
 			char *src_server = "fifo_server_";
@@ -282,8 +284,7 @@ int main(int argc, char** argv){
 						strcat(server, s);
 						int thread_process = mkfifo(server, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 						if (thread_process < 0){
-							printf("Unable to create a fifo\n");
-							exit(-1);
+							printf("Unable to create a fifo, may have been created already\n");
 						}
 						char *client = "fifo_client_";
 						char *c;
@@ -291,8 +292,7 @@ int main(int argc, char** argv){
 						strcat(client, s);
 						int main_process = mkfifo(client,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 						if (main_process < 0){
-							printf("Unable to create a fifo\n");
-							exit(-1);
+							printf("Unable to create a fifo, may have been created already\n");
 						}
 						pthread_create(&processes[i],NULL,thread_func, (void*)i);
 						break;
@@ -350,7 +350,6 @@ int main(int argc, char** argv){
 								free(buf);
 								exit(-1);
 							}
-							
 						}
 					}	
 				} else if ( strcmp(args[0],"mem") == 0){
@@ -385,12 +384,12 @@ int main(int argc, char** argv){
                                                                 free(buf);
                                                                 exit(-1);
                                                         }
-                                                        
                                                 }
                                         }
 				} else if ( strcmp(args[0],"allocate") == 0){
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
+					} else {
                                                 tid = args[1];
                                                 strcat(src_server,tid);
                                                 strcat(src_client,tid);
@@ -418,8 +417,6 @@ int main(int argc, char** argv){
                                                                 free(buf);
                                                                 exit(-1);
                                                         }
-                                                        
-                                                        
                                                 }
                                         }
 				} else if ( strcmp(args[0],"read") == 0){
@@ -436,8 +433,7 @@ int main(int argc, char** argv){
                                                         if (fifo_server < 0){
                                                                 printf("Error in opening file\n");
                                                                 exit(-1);
-                                                        }
-							
+                                                        }	
 							char* cmdr = "read ";
 							char* virt_addrr = args[2];
 							strcat(cmdr, virt_addrr);
@@ -451,8 +447,6 @@ int main(int argc, char** argv){
                                                         read(fifo_client, buf, 11*sizeof(char));
                                                         printf("Value: %s\n",buf);
                                                         free(buf);
-                                                        
-                                                        
                                                 }
                                         }
 				} else if ( strcmp(args[0],"write") == 0){
@@ -509,4 +503,5 @@ int main(int argc, char** argv){
 			
 		} while (status);
 	}
+	return 0;
 }
