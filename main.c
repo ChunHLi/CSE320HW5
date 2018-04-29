@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -85,9 +86,9 @@ void *thread_func(void *vargp){
 			myid = pc;
 		}
 	}
-	char* sid;
+	char sid[1];
 	sprintf(sid, "%d",myid);
-	char* id;
+	char id[80];
 	sprintf(id, "%lu", pid);
 	int virt_len = 0;
 	unsigned long virt_addr[64];
@@ -105,9 +106,9 @@ void *thread_func(void *vargp){
 	int fifo_client;
 	char *src_emu_server = "emu_server";
 	char *src_emu_client = "emu_client";
-	char *src_server = "fifo_server_";
+	char src_server[80] = "fifo_server_";
 	strcat(src_server, id);
-	char *src_client = "fifo_client_";
+	char src_client[80] = "fifo_client_";
 	strcat(src_client, id);
 	char *buf;
 	char *writ;
@@ -116,7 +117,6 @@ void *thread_func(void *vargp){
 		fifo_server = open(src_server,O_RDWR);
 		if (fifo_server<0) {
 			printf("Error opening file\n");
-			
 		}
                 buf = malloc(255*sizeof(char));
 		read(fifo_server,buf,255*sizeof(char));
@@ -278,6 +278,7 @@ int main(int argc, char** argv){
 		printf("Invalid number of arguments (expected 1)\n");
 		return -1;
 	} else {
+		int i = 0;
 		int status = 1;
 		char str[255];
 		int fifo_server = -1;
@@ -295,8 +296,8 @@ int main(int argc, char** argv){
 			printf("Unable to create fifo to emulated mem, may already exists\n");
 		}
 		do {
-			char *src_server = "fifo_server_";
-                	char *src_client = "fifo_client_";
+			char src_server[80] = "fifo_server_";
+                	char src_client[80] = "fifo_client_";
 			char** args;
 			printf("> ");
 			fgets(str,255,stdin);
@@ -306,27 +307,25 @@ int main(int argc, char** argv){
                         }
 			if ( strcmp(str,"") == 0 ){
 			} else if ( strcmp(str,"create") == 0){
-				int i;
-				for (i = 0; i < 4; i++){
-					if (processes[i] == -1) {
-						pthread_create(&processes[i],NULL,thread_func, (void*)i);	
-						char *server = "fifo_server_";
-						char *s;
-						sprintf(s,"%lu",processes[i]);
-						strcat(server, s);
-						int thread_process = mkfifo(server, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+				int d;
+				for (d = 0; d < 4; d++){
+					if (processes[d] == -1) {
+						pthread_create(&processes[d],NULL,&thread_func, NULL);	
+						char s[80];
+						sprintf(s,"%lu",processes[d]);
+						strcat(src_server, s);
+						int thread_process = mkfifo(src_server, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 						if (thread_process < 0){
 							printf("Unable to create a fifo, may have been created already\n");
 						}
-						char *client = "fifo_client_";
-						char *c;
-						sprintf(c,"%d",i);
-						strcat(client, s);
-						int main_process = mkfifo(client,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+						char c[80];
+						sprintf(c,"%lu",processes[d]);
+						strcat(src_client, c);
+						int main_process = mkfifo(src_client,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 						if (main_process < 0){
 							printf("Unable to create a fifo, may have been created already\n");
 						}
-						break;
+						d = 4;
 					}
 				}
 			} else if ( strcmp(str,"list") == 0){
@@ -345,7 +344,7 @@ int main(int argc, char** argv){
 			} else {
 				char *bufff;
 				char* token;
-                                int i = 0;
+                                i = 0;
                                 for (token=strtok(str," "); token != NULL; token=strtok(NULL, " ")){
                                         args[i] = strdup(token);
                                         i += 1;
