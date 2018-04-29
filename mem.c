@@ -16,6 +16,7 @@ char *writ;
 void* ram;
 int thread_size[4] = {0,256,512,768};
 char **args;
+int status = 1;
 
 int main(int argc, char** argv){
 	emu_server = mkfifo(src_emu_server,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
@@ -28,11 +29,12 @@ int main(int argc, char** argv){
         }
 	ram = calloc(1024, sizeof(char));
 	
-	while(1){
+	while(status){
 		emu_server = open(src_emu_client,O_RDWR);
 		if (emu_server < 0){
 			printf("Error in opening file\n");
-			exit(-1);
+			status = 0;
+			goto free;
                 }		
 		buf = malloc(255*sizeof(char));
 		read(emu_server, buf, 255*sizeof(char));
@@ -43,8 +45,7 @@ int main(int argc, char** argv){
                         i += 1;
                 }
                 args[i] = NULL;
-		sleep(5);
-		
+		sleep(5);	
 		if (strcmp(args[0],"allo")==0){
 			int id = atoi(args[1]);
 			char *physADDR;
@@ -75,19 +76,35 @@ int main(int argc, char** argv){
                                 	((int*)ram)[intADDR / 4] = val;
                                 	writ = "writ_succ_";
 				}
+			}
+		} else if (strcmp(args[0],"kill")==0){
+			int pid = atoi(args[1]);
+			int offset;
+			for (offset=0;offset<64;offset++){
+				((int*)ram)[pid*64+offset] = 0;
 			}	
+		} else if (strcmp(args[0],"exit")==0){
+			printf("Exited\n");
+			status = 0;
 		} else {
 			printf("Error, invalid command\n");
 		}
 		emu_client = open(src_emu_client,O_RDWR);
                 if (emu_client < 0){
                 	printf("Error in opening file\n");
-                	exit(-1);
-                }
-		addrSkip:
-		write(emu_client, writ, 28*sizeof(char));
+                	status = 0;
+                } else {
+			write(emu_client, writ, 28*sizeof(char));
+		}
+		i -= 1;
+                while (i >= 0){
+                        free(args[i]);
+                	i -= 1;
+                } 
 		free(buf);
 		close(emu_server);
                 close(emu_client); 
 	}
+	free:
+	free(ram);
 }
