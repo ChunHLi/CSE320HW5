@@ -11,56 +11,50 @@
 pthread_t processes[4] = {-1,-1,-1,-1};
 
 unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char* myid){
-	char *src_server = "emu_server";
-	char *src_client = "emu_client";
-	char allo[6] = "allo,";
+	char* src_server = "emu_server";
+	char* src_client = "emu_client";
+	char allo[10] = "allo,";
 	strcat(allo,myid);
-	if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
-		printf("Emulated Memory not found\n");
+	int emu_server = open(src_server,O_RDWR);
+        if (emu_server < 0){
+		printf("Error in opening file\n");
 		exit(-1);
-        } else {
-		int emu_server = open(src_server,O_RDWR);
-                if (emu_server < 0){
-			printf("Error in opening file\n");
-			exit(-1);
-		}
-		write(emu_server,allo,6*sizeof(char));
-                int emu_client = open(src_client,O_RDWR);
-		if (emu_client < 0){
-			printf("Error in opening file\n");
-			exit(-1);
-                }
-                char *buf = malloc(28*sizeof(char));
-		printf("Before reading emu_client\n");
-                read(emu_client, buf, 4*sizeof(char));
-		if (strcmp(buf,"error,address out of range")==0 || strcmp(buf,"error,address is not aligned")==0){
-			printf("%s\n",buf);
-			return -1;
-		}
-		int physAddr = atoi(buf);
-		int i = 0;
-		for (i; i < 64 ;i++){
-			if (pt_2[i] < 512){
-				break;
-			}
-		}
-		pt_2[i] = (unsigned long)(512 + physAddr);
-		int j = 0;
-		for (j; j < 64; j++){
-			if (pt_1[j] < 512){
-				break;
-			}
-		}
-		pt_1[j] = (unsigned long)(512 + i);
-		unsigned long pt1 = pt_1[j];
-		pt1 = pt1 << 22;
-		unsigned long pt2 = pt_2[i];
-		pt2 = pt2 << 12;
-		unsigned long va = pt1 | pt2;
-                free(buf);
-		return va;                        
 	}
-	return -1;
+	write(emu_server,allo,10*sizeof(char));
+        int emu_client = open(src_client,O_RDWR);
+	if (emu_client < 0){
+		printf("Error in opening file\n");
+		exit(-1);
+        }
+        char* buf = malloc(28*sizeof(char));
+	printf("Before reading emu_client\n");
+        read(emu_client, buf, 4*sizeof(char));
+	if (strcmp(buf,"error,address out of range")==0 || strcmp(buf,"error,address is not aligned")==0){
+		printf("%s\n",buf);
+		return -1;
+	}
+	int physAddr = atoi(buf);
+	int i = 0;
+	for (i; i < 64 ;i++){
+		if (pt_2[i] < 512){
+			break;
+		}
+	}
+	pt_2[i] = (unsigned long)(512 + physAddr);
+	int j = 0;
+	for (j; j < 64; j++){
+		if (pt_1[j] < 512){
+			break;
+		}
+	}
+	pt_1[j] = (unsigned long)(512 + i);
+	unsigned long pt1 = pt_1[j];
+	pt1 = pt1 << 22;
+	unsigned long pt2 = pt_2[i];
+	pt2 = pt2 << 12;
+	unsigned long va = pt1 | pt2;
+        free(buf);
+	return va;                        
 }
 
 unsigned long cse320_virt_to_phys(unsigned long va){
@@ -88,7 +82,7 @@ void *thread_func(void *vargp){
 	}
 	char sid[1];
 	sprintf(sid, "%d",myid);
-	char id[80];
+	char id[32];
 	sprintf(id, "%lu", pid);
 	int virt_len = 0;
 	unsigned long virt_addr[64];
@@ -104,42 +98,36 @@ void *thread_func(void *vargp){
 	int emu_client;
 	int fifo_server;
 	int fifo_client;
-	char *src_emu_server = "emu_server";
-	char *src_emu_client = "emu_client";
+	char* src_emu_server = "emu_server";
+	char* src_emu_client = "emu_client";
 	char src_server[80] = "fifo_server_";
 	strcat(src_server, id);
 	char src_client[80] = "fifo_client_";
 	strcat(src_client, id);	
 	while (1) {
-		char *writ;
+		char* writ;
 		fifo_server = open(src_server,O_RDWR);
 		if (fifo_server<0) {
 			printf("Error opening file\n");
 		}
-                char buf[255];
-		read(fifo_server,buf,255*sizeof(char));
+                char buf[80];
+		read(fifo_server,buf,80*sizeof(char));
 		fifo_client = open(src_client, O_RDWR);
 		if (fifo_client<0) {
 			printf("Error opening file\n");
 		}
-		buf[strlen(buf)] = '\0';
 		if (strcmp(buf,"kill")==0){
 			printf("Process Index: %s\n",sid);
 			writ = "kill_succ_";
 			printf("Process Killed");
-			if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
-				printf("Emulated Memory not found\n");
+			char k[6] = "kill,";
+			strcat(k,sid);
+                        emu_server = open(src_emu_server,O_RDWR);
+                        if (emu_server < 0){
+                                printf("Error in opening file\n");
                                 exit(-1);
-                        } else {
-				char k[6] = "kill,";
-				strcat(k,sid);
-                        	emu_server = open(src_emu_server,O_RDWR);
-                                if (emu_server < 0){
-                                	printf("Error in opening file\n");
-                                        exit(-1);
-                                }
-                                write(emu_server,k,6*sizeof(char));
-			}
+                        }
+                        write(emu_server,k,6*sizeof(char));
 			write(fifo_client,writ,10*sizeof(char));
 			close(fifo_server);
         		close(fifo_client);
@@ -156,26 +144,30 @@ void *thread_func(void *vargp){
 		} else if (strcmp(buf,"allo")==0){
 			unsigned long va = cse320_malloc(pt_1,pt_2,sid);
 			if (va == 0xFFFFFFFF) {
+				printf("allo_fail_: %lu\n", va);
 				writ = "allo_fail_";
 				write(fifo_client,writ,10*sizeof(char));		
 			} else {
+				printf("allo_succ_: %lu\n", va);
 				writ = "allo_succ_";
 				virt_addr[virt_len] = va;
 				virt_len += 1;
 				write(fifo_client,writ,10*sizeof(char));
 			}
 		} else {
-			char* token;
-                	int i = 0;
-                	char **args;
-                	for (token=strtok(buf," "); token != NULL; token=strtok(NULL, " ")){
-                        	printf("%s\n",token);
-				args[i] = strdup(token);
-                        	i += 1;
-                	}
-                	args[i] = NULL;
+			char** args = (char**)malloc(4*sizeof(char*));
+                        int a;
+                        for (a=0;a<4;a++){
+                        	args[a] = (char*)malloc(32*sizeof(char));
+                        }
+                        char* token = strtok(buf," ");
+                        int i = 0;
+                        while (token != NULL){
+                                args[i++] = strdup(token);
+                        	token = strtok(NULL, " ");
+                        }
 			if (strcmp(args[0],"read")==0){
-				char *strVA;
+				char* strVA;
 				unsigned long va = strtoul(args[1], &strVA, 10);
 				unsigned long pa = cse320_virt_to_phys(va);
 				if (pa > 0xFFFFF000){
@@ -185,41 +177,31 @@ void *thread_func(void *vargp){
 						writ = "NULL";
 						write(fifo_client,writ,4*sizeof(char));
 					} else {
-						char *r = "read,";
-						char *physADDR;
+						char* r = "read,";
+						char* physADDR;
 						sprintf(physADDR,"%lu",pa);
 						strcat(r, physADDR);
-						if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
-                                			printf("Emulated Memory not found\n");
-                                			exit(-1);
-                        			} else {
-                                			emu_server = open(src_emu_server,O_RDWR);
-                                			if (emu_server < 0){
-                                        			printf("Error in opening file\n");
-                                        			exit(-1);
-                                			}
-                                			write(emu_server,r,9*sizeof(char));
-                                			emu_client = open(src_emu_client,O_RDWR);
-                                			if (emu_client < 0){
-                                        			printf("Error in opening file\n");
-                                        			exit(-1);
-                                			}
-                                			char * bufff = malloc(28*sizeof(char));
-                                			read(emu_client, bufff, 28*sizeof(char));
-							write(fifo_client, bufff, 28*sizeof(char));
-                        				free(bufff);
-							close(emu_server);
-               						close(emu_client);
-						}
+                                		emu_server = open(src_emu_server,O_RDWR);
+                                		if (emu_server < 0){
+                                        		printf("Error in opening file\n");
+                                        		exit(-1);
+                                		}
+                                		write(emu_server,r,9*sizeof(char));
+                                		emu_client = open(src_emu_client,O_RDWR);
+                                		if (emu_client < 0){
+                                        		printf("Error in opening file\n");
+                                        		exit(-1);
+                                		}
+                                		char* bufff = malloc(28*sizeof(char));
+                                		read(emu_client, bufff, 28*sizeof(char));
+						write(fifo_client, bufff, 28*sizeof(char));
+                        			free(bufff);
+						close(emu_server);
+               					close(emu_client);
 					}
 				}
-				i -= 1;
-                        	while (i >= 0){
-                                	free(args[i]);
-                                	i -= 1;
-                        	}
 			} else if (strcmp(args[0],"write")==0){
-				char *strVA;
+				char* strVA;
                         	unsigned long va = strtoul(args[1], &strVA, 10);
                         	unsigned long pa = cse320_virt_to_phys(va);
                         	if (pa > 0xFFFFF000){
@@ -229,45 +211,40 @@ void *thread_func(void *vargp){
                                         	writ = "writ_fail_";
                                         	write(fifo_client,writ,10*sizeof(char));
                                 	} else {
-						char *w = "write,";
-						char *del = ",";
-						char *physADDR;
+						char* w = "write,";
+						char* del = ",";
+						char* physADDR;
 						sprintf(physADDR,"%lu",pa);
                                         	strcat(w, physADDR);
 						strcat(w, del);
 						strcat(w, args[2]);
-                                        	if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
-                                                	printf("Emulated Memory not found\n");
-                                                	exit(-1);
-                                        	} else {
-                                                	emu_server = open(src_emu_server,O_RDWR);
-                                                	if (emu_server < 0){
-                                                        	printf("Error in opening file\n");
-                                                        	exit(-1);
-                                                	}
-                                                	write(emu_server,w,255*sizeof(char));
-                                                	emu_client = open(src_emu_client,O_RDWR);
-                                                	if (emu_client < 0){
-                                                        	printf("Error in opening file\n");
-                                                        	exit(-1);
-                                                	}
-                                                	char *bufff = malloc(28*sizeof(char));
-                                                	read(emu_client, bufff, 28*sizeof(char));
-                                                	write(fifo_client, bufff, 28*sizeof(char));
-							free(bufff);
-							close(emu_server);
-                					close(emu_client);		
-						}
+                                                emu_server = open(src_emu_server,O_RDWR);
+                                                if (emu_server < 0){
+                                                       	printf("Error in opening file\n");
+                                                       	exit(-1);
+                                                }
+                                                write(emu_server,w,255*sizeof(char));
+                                                emu_client = open(src_emu_client,O_RDWR);
+                                                if (emu_client < 0){
+                                                        printf("Error in opening file\n");
+                                                        exit(-1);
+                                                }
+                                                char* bufff = malloc(28*sizeof(char));
+                                                read(emu_client, bufff, 28*sizeof(char));
+                                                write(fifo_client, bufff, 28*sizeof(char));
+						free(bufff);
+						close(emu_server);
+                				close(emu_client);		
 					}
 				}
-				i -= 1;
-				while (i >= 0){
-                        		free(args[i]);
-                                	i -= 1;
-                        	}
 			} else {
                         	printf("Error, invalid command\n");
                 	}
+			i -= 1;
+                        while (i >= 0){
+                        	free(args[i]);
+                                i -= 1;
+                        }
 		}
 		close(fifo_server);
         	close(fifo_client);
@@ -283,13 +260,12 @@ int main(int argc, char** argv){
 	} else {
 		int i = 0;
 		int status = 1;
-		char str[255];
+		char str[64];
 		int fifo_server = -1;
 		int fifo_client = -1;
-		char *src_emu_server = "emu_server";
-		char *src_emu_client = "emu_client";
-		char *tid;
-		char *buf;
+		char* src_emu_server = "emu_server";
+		char* src_emu_client = "emu_client";
+		char* buf;
 		int emu_server = mkfifo(src_emu_server,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 		if (emu_server < 0) {
 			printf("Unable to create fifo to emulated mem, may already exists\n");
@@ -301,19 +277,19 @@ int main(int argc, char** argv){
 		do {
 			char src_server[80] = "fifo_server_";
                 	char src_client[80] = "fifo_client_";
-			char** args;
 			printf("> ");
-			fgets(str,sizeof(str),stdin);
+			char** args;
+			fgets(str,64,stdin);
 			char* p = strchr(str,'\n');
                         if (p != NULL){
                                 str[p-str]='\0';
-                        }
+			}
 			if ( strcmp(str,"") == 0 ){
 			} else if ( strcmp(str,"create") == 0){
 				int d;
 				for (d = 0; d < 4; d++){
 					if (processes[d] == -1) {
-						pthread_create(&processes[d],NULL,&thread_func, NULL);	
+						pthread_create(&processes[d],NULL,thread_func, NULL);	
 						char s[80];
 						sprintf(s,"%lu",processes[d]);
 						strcat(src_server, s);
@@ -328,7 +304,7 @@ int main(int argc, char** argv){
 						if (main_process < 0){
 							printf("Unable to create a fifo, may have been created already\n");
 						}
-						d = 4;
+						break;
 					}
 				}
 			} else if ( strcmp(str,"list") == 0){
@@ -341,56 +317,55 @@ int main(int argc, char** argv){
 				}
 			} else if ( strcmp(str,"exit") == 0){
 				emu_server = open(src_emu_server,O_RDWR);
-				char * e = "exit";
+				char* e = "exit";
                                 write(emu_server,e,4*sizeof(char));
 				status = 0;
 			} else {
-				char *bufff;
-				char* token;
+				char** args = (char**)malloc(4*sizeof(char*));
+				int a;
+				for (a=0;a<4;a++){
+					args[a] = (char*)malloc(32*sizeof(char));
+				}
+				char* token = strtok(str," ");
                                 i = 0;
-                                for (token=strtok(str," "); token != NULL; token=strtok(NULL, " ")){
-                                        args[i] = strdup(token);
-                                        i += 1;
-                                }
-                                args[i] = NULL;
+				while (token != NULL){
+					args[i++] = strdup(token);
+					token = strtok(NULL, " ");
+				}
 				if ( strcmp(args[0],"kill") == 0){
 					if (i != 2){
 						printf("Invalid number of arguments: Expected 2\n");
 					} else {
-						tid = args[1];
+						char* tid = args[1];
 						strcat(src_server,tid);
 						strcat(src_client,tid);
-						if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
-							printf("Thread does not exist\n");
+						fifo_server = open(src_server,O_RDWR);
+						if (fifo_server < 0){
+							printf("Error in opening file\n");
+							exit(-1);
+						}
+						write(fifo_server, "kill",4*sizeof(char));
+						fifo_client = open(src_client,O_RDWR);
+						if (fifo_client < 0){
+							printf("Error in opening file\n");
+							exit(-1);
+						}
+						char* bufff = malloc(10*sizeof(char));
+						sleep(2);
+						read(fifo_client, bufff, 10*sizeof(char));
+						if (strcmp(bufff, "kill_succ_") == 0){
+							free(bufff);
+							unsigned long int rid = strtoul(tid, NULL, 10);
+							int t = 0;
+							for (t; t < 4;t++){
+								if (((unsigned long int)processes[t]) == rid){
+									processes[t] = -1;
+								}	
+							}
 						} else {
-							fifo_server = open(src_server,O_RDWR);
-							if (fifo_server < 0){
-								printf("Error in opening file\n");
-								exit(-1);
-							}
-							write(fifo_server, "kill",4*sizeof(char));
-							fifo_client = open(src_client,O_RDWR);
-							if (fifo_client < 0){
-								printf("Error in opening file\n");
-								exit(-1);
-							}
-							bufff = malloc(10*sizeof(char));
-							sleep(2);
-							read(fifo_client, bufff, 10*sizeof(char));
-							if (strcmp(bufff, "kill_succ_") == 0){
-								free(bufff);
-								unsigned long int rid = strtoul(tid, NULL, 10);
-								int t = 0;
-								for (t; t < 4;t++){
-									if (((unsigned long int)processes[t]) == rid){
-										processes[t] = -1;
-									}	
-								}
-							} else {
-								printf("Error in killing thread\n");
-								free(bufff);
-								exit(-1);
-							}
+							printf("Error in killing thread\n");
+							free(bufff);
+							exit(-1);
 						}
 					}	
 				} else if ( strcmp(args[0],"mem") == 0){
@@ -398,138 +373,122 @@ int main(int argc, char** argv){
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
                                         } else {
-                                                tid = args[1];
+                                                char* tid = args[1];
                                                 strcat(src_server,tid);
                                                 strcat(src_client,tid);
-                                                if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
-                                                        printf("Thread does not exist\n");
-                                                } else {
-                                                        fifo_server = open(src_server,O_RDWR);
-                                                        if (fifo_server < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-                                                        write(fifo_server, "memo",4*sizeof(char));
-							fifo_client = open(src_client,O_RDWR);
-                                                        if (fifo_client < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-							bufff = malloc(10*sizeof(char));
-							printf("hello from main\n");
-                                                        sleep(2);
-							read(fifo_client, bufff, 10*sizeof(char));
-                                                        if (strcmp(bufff, "memo_succ_") == 0){
-								printf("Success\n");
-                                                        } else {
-                                                                printf("Error in printing mem\n");
-                                                        }
-							free(bufff);
+                                                fifo_server = open(src_server,O_RDWR);
+                                                if (fifo_server < 0){
+                                                        printf("Error in opening file\n");
+                                                        exit(-1);
                                                 }
+                                                write(fifo_server, "memo",4*sizeof(char));
+						fifo_client = open(src_client,O_RDWR);
+                                                if (fifo_client < 0){
+                                                        printf("Error in opening file\n");
+                                                        exit(-1);
+                                                }
+						char* bufff = malloc(10*sizeof(char));
+						printf("hello from main\n");
+                                                sleep(2);
+						read(fifo_client, bufff, 10*sizeof(char));
+                                                if (strcmp(bufff, "memo_succ_") == 0){
+							printf("Success\n");
+                                                } else {
+                                                        printf("Error in printing mem\n");
+                                                }
+						free(bufff);
                                         }
 				} else if ( strcmp(args[0],"allocate") == 0){
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
 					} else {
-                                                tid = args[1];
+                                                char* tid = args[1];
+						printf("tid : %s\n", tid);
                                                 strcat(src_server,tid);
                                                 strcat(src_client,tid);
-                                                if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
-                                                        printf("Thread does not exist\n");
+						printf("server filename: %s\n", src_server);
+						printf("client filename: %s\n", src_client);
+                                                fifo_server = open(src_server,O_RDWR);
+                                                if (fifo_server < 0){
+                                                        printf("Error in opening file\n");
+                                                        exit(-1);
+                                                }
+                                                write(fifo_server, "allo",4*sizeof(char));
+						fifo_client = open(src_client,O_RDWR);
+                                                if (fifo_client < 0){
+                                                	printf("Error in opening file\n");
+                                                        exit(-1);
+                                                }
+						char* bufff = malloc(10*sizeof(char));
+                                                read(fifo_client, bufff, 10*sizeof(char));
+                                                if (strcmp(bufff, "allo_succ_") == 0){
+							printf("Allocated\n");
+							free(bufff);
                                                 } else {
-                                                        fifo_server = open(src_server,O_RDWR);
-                                                        if (fifo_server < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-                                                        write(fifo_server, "allo",4*sizeof(char));
-							fifo_client = open(src_client,O_RDWR);
-                                                        if (fifo_client < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-							bufff = malloc(10*sizeof(char));
-                                                        read(fifo_client, bufff, 10*sizeof(char));
-                                                        if (strcmp(buf, "allo_succ_") == 0){
-								printf("Allocated\n");
-								free(bufff);
-                                                        } else {
-                                                                printf("Error in allocating\n");
-                                                                free(bufff);
-                                                                exit(-1);
-                                                        }
+                                                	printf("Error in allocating\n");
+                                                        free(bufff);
+                                                        exit(-1);
                                                 }
                                         }
 				} else if ( strcmp(args[0],"read") == 0){
 					if (i != 3){
                                                 printf("Invalid number of arguments: Expected 3\n");
                                         } else {
-                                                tid = args[1];
+                                                char* tid = args[1];
                                                 strcat(src_server,tid);
                                                 strcat(src_client,tid);
-                                                if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
-                                                        printf("Thread does not exist\n");
-                                                } else {
-                                                        fifo_server = open(src_server,O_RDWR);
-                                                        if (fifo_server < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }	
-							char* cmdr = "read ";
-							char* virt_addrr = args[2];
-							strcat(cmdr, virt_addrr);
-                                                        write(fifo_server, cmdr,strlen(cmdr)*sizeof(char));
-							fifo_client = open(src_client,O_RDWR);
-                                                        if (fifo_client < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-                                                        bufff = malloc(11*sizeof(char));
-                                                        read(fifo_client, bufff, 11*sizeof(char));
-                                                        printf("Value: %s\n",bufff);
-                                                        free(bufff);
+                                                fifo_server = open(src_server,O_RDWR);
+                                                if (fifo_server < 0){
+                                                        printf("Error in opening file\n");
+                                                        exit(-1);
+                                                }	
+						char* cmdr = "read ";
+						char* virt_addrr = args[2];
+						strcat(cmdr, virt_addrr);
+                                                write(fifo_server, cmdr,strlen(cmdr)*sizeof(char));
+						fifo_client = open(src_client,O_RDWR);
+                                                if (fifo_client < 0){
+                                                	printf("Error in opening file\n");
+                                                        exit(-1);
                                                 }
+                                                char* bufff = malloc(11*sizeof(char));
+                                                read(fifo_client, bufff, 11*sizeof(char));
+                                                printf("Value: %s\n",bufff);
+                                                free(bufff);
                                         }
 				} else if ( strcmp(args[0],"write") == 0){
 					if (i != 4){
                                                 printf("Invalid number of arguments: Expected 4\n");
                                         } else {
-                                                tid = args[1];
+                                                char* tid = args[1];
                                                 strcat(src_server,tid);
                                                 strcat(src_client,tid);
-                                                if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
-                                                        printf("Thread does not exist\n");
+                                                fifo_server = open(src_server,O_RDWR);
+                                                if (fifo_server < 0){
+                                                        printf("Error in opening file\n");
+                                                        exit(-1);
+                                               	}
+                                                char* cmdw = "write ";
+                                               	char* virt_addrw = args[2];
+						char* value = args[3];
+						char* tmp = " ";
+                                               	strcat(cmdw, virt_addrw);
+						strcat(cmdw, tmp);
+						strcat(cmdw, value);
+                                               	write(fifo_server, cmdw,strlen(cmdw)*sizeof(char));
+						fifo_client = open(src_client,O_RDWR);
+                                                if (fifo_client < 0){
+                                                	printf("Error in opening file\n");
+                                                        exit(-1);
+                                                }
+                                                char* bufff = malloc(10*sizeof(char));
+                                                read(fifo_client, bufff, 10*sizeof(char));
+                                                if (strcmp(bufff, "writ_succ_") == 0){
+							free(bufff);
                                                 } else {
-                                                        fifo_server = open(src_server,O_RDWR);
-                                                        if (fifo_server < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-                                                
-                                                        char* cmdw = "write ";
-                                                        char* virt_addrw = args[2];
-							char* value = args[3];
-							char* tmp = " ";
-                                                        strcat(cmdw, virt_addrw);
-							strcat(cmdw, tmp);
-							strcat(cmdw, value);
-                                                        write(fifo_server, cmdw,strlen(cmdw)*sizeof(char));
-							fifo_client = open(src_client,O_RDWR);
-                                                        if (fifo_client < 0){
-                                                                printf("Error in opening file\n");
-                                                                exit(-1);
-                                                        }
-                                                        bufff = malloc(10*sizeof(char));
-                                                        read(fifo_client, bufff, 10*sizeof(char));
-                                                        if (strcmp(bufff, "writ_succ_") == 0){
-								free(bufff);
-                                                        } else {
-                                                                printf("Error in writing\n");
-                                                                free(bufff);
-                                                                exit(-1);
-                                                        }
-                                                 
-                                                 
+                                                        printf("Error in writing\n");
+                                                        free(bufff);
+                                                       	exit(-1);
                                                 }
                                         }
 				} else {

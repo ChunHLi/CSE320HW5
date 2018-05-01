@@ -34,14 +34,17 @@ int main(int argc, char** argv){
 		
 		printf("%s has a length of %lu\n",buf,strlen(buf));
                 int i = 0;
-                char** args;
+                char** args = (char**)malloc(3*sizeof(char*));
+		int a;
+		for (a = 0; a<3 ;a++){
+			args[a]= (char *)malloc(32*sizeof(char));
+		}
 		char* token;
                 for (token=strtok(buf,","); token != NULL; token=strtok(NULL, ",")){
-			printf("token: %s\n",token);
+			printf("token: %s has length of %lu\n",token,strlen(token));
                 	args[i++] = strdup(token);
                 }
-		printf("%s\n",args[0]);
-		printf("%s\n",args[1]);
+		printf("made it out of forward loop\n");
 		sleep(5);	
 		if (strcmp(args[0],"allo")==0){
 			printf("mem is indeed seeing this\n");
@@ -81,10 +84,10 @@ int main(int argc, char** argv){
 			int offset;
 			for (offset=0;offset<64;offset++){
 				((int*)ram)[pid*64+offset] = 0;
-			}	
+			}
 		} else if (strcmp(args[0],"exit")==0){
-			printf("Exited\n");
-			status = 0;
+                        printf("Exited\n");
+                        status = 0;	
 		} else {
 			printf("Error, invalid command\n");
 		}
