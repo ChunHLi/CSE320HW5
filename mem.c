@@ -30,14 +30,14 @@ int main(int argc, char** argv){
 	while(status){
 		char buf[255];
 		emu_server = open(src_emu_server,O_RDWR);
-		//read(emu_server,buf,sizeof(buf));
-		FILE * fp = fdopen(emu_server,"r+");
-		fgets(buf,255,fp);
-		printf("%s\n",buf);
+		read(emu_server,buf,sizeof(buf));
+		
+		printf("%s has a length of %lu\n",buf,strlen(buf));
                 int i = 0;
                 char** args;
 		char* token;
                 for (token=strtok(buf,","); token != NULL; token=strtok(NULL, ",")){
+			printf("token: %s\n",token);
                 	args[i++] = strdup(token);
                 }
 		printf("%s\n",args[0]);
