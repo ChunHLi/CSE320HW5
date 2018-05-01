@@ -13,8 +13,7 @@ pthread_t processes[4] = {-1,-1,-1,-1};
 unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char* myid){
 	char *src_server = "emu_server";
 	char *src_client = "emu_client";
-	char *allo = "allo,";
-	char *buf;
+	char allo[6] = "allo,";
 	strcat(allo,myid);
 	if (access(src_server, F_OK) == -1 || access(src_client, F_OK) == -1 ){
 		printf("Emulated Memory not found\n");
@@ -25,13 +24,14 @@ unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char*
 			printf("Error in opening file\n");
 			exit(-1);
 		}
-		write(emu_server,allo,255*sizeof(char));
+		write(emu_server,allo,6*sizeof(char));
                 int emu_client = open(src_client,O_RDWR);
 		if (emu_client < 0){
 			printf("Error in opening file\n");
 			exit(-1);
                 }
-                buf = malloc(4*sizeof(char));
+                char *buf = malloc(28*sizeof(char));
+		printf("Before reading emu_client\n");
                 read(emu_client, buf, 4*sizeof(char));
 		if (strcmp(buf,"error,address out of range")==0 || strcmp(buf,"error,address is not aligned")==0){
 			printf("%s\n",buf);
@@ -109,41 +109,29 @@ void *thread_func(void *vargp){
 	char src_server[80] = "fifo_server_";
 	strcat(src_server, id);
 	char src_client[80] = "fifo_client_";
-	strcat(src_client, id);
-	char *buf;
-	char *writ;
-	char** args;	
+	strcat(src_client, id);	
 	while (1) {
+		char *writ;
 		fifo_server = open(src_server,O_RDWR);
 		if (fifo_server<0) {
 			printf("Error opening file\n");
 		}
-                buf = malloc(255*sizeof(char));
+                char buf[255];
 		read(fifo_server,buf,255*sizeof(char));
 		fifo_client = open(src_client, O_RDWR);
 		if (fifo_client<0) {
 			printf("Error opening file\n");
 		}
-		char* token;
-                int i = 0;
-               	for (token=strtok(buf," "); token != NULL; token=strtok(NULL, " ")){
-                	args[i] = strdup(token);
-                       	i += 1;
-                }
-                args[i] = NULL;
-		if (strcmp(args[0],"kill")==0){
+		buf[strlen(buf)] = '\0';
+		if (strcmp(buf,"kill")==0){
+			printf("Process Index: %s\n",sid);
 			writ = "kill_succ_";
-			printf("Process Killed\n");
-			i -= 1;
-                	while (i >= 0){
-                        	free(args[i]);
-                        	i -= 1;
-			}
+			printf("Process Killed");
 			if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
 				printf("Emulated Memory not found\n");
                                 exit(-1);
                         } else {
-				char *k = "kill,";
+				char k[6] = "kill,";
 				strcat(k,sid);
                         	emu_server = open(src_emu_server,O_RDWR);
                                 if (emu_server < 0){
@@ -152,22 +140,20 @@ void *thread_func(void *vargp){
                                 }
                                 write(emu_server,k,6*sizeof(char));
 			}
-			free(buf);
 			write(fifo_client,writ,10*sizeof(char));
 			close(fifo_server);
         		close(fifo_client);
         		close(emu_server);
-        		close(emu_client);
 			goto kill;
-                } else if (strcmp(args[0],"memo")==0){
+                } else if (strcmp(buf,"memo")==0){
 			writ = "memo_succ_";
-			printf("\nAddresses within the process %s:\n", id);
+			printf("Addresses within the process %s:\n", id);
 			int m;
 			for (m=0; m<virt_len ;m++){
 				printf("%lu\n",virt_addr[m]);
 			}
 			write(fifo_client,writ,10*sizeof(char));
-		} else if (strcmp(args[0],"allo")==0){
+		} else if (strcmp(buf,"allo")==0){
 			unsigned long va = cse320_malloc(pt_1,pt_2,sid);
 			if (va == 0xFFFFFFFF) {
 				writ = "allo_fail_";
@@ -178,96 +164,113 @@ void *thread_func(void *vargp){
 				virt_len += 1;
 				write(fifo_client,writ,10*sizeof(char));
 			}
-		} else if (strcmp(args[0],"read")==0){
-			char *strVA;
-			unsigned long va = strtoul(args[1], &strVA, 10);
-			unsigned long pa = cse320_virt_to_phys(va);
-			if (pa > 0xFFFFF000){
-			} else {
-				if (pa < myid * 256 || pa >= (myid + 1)* 256){
-					printf("error,address out of range");
-					writ = "NULL";
-					write(fifo_client,writ,4*sizeof(char));
-				} else {
-					char *r = "read,";
-					char *physADDR;
-					sprintf(physADDR,"%lu",pa);
-					strcat(r, physADDR);
-					if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
-                                		printf("Emulated Memory not found\n");
-                                		exit(-1);
-                        		} else {
-                                		emu_server = open(src_emu_server,O_RDWR);
-                                		if (emu_server < 0){
-                                        		printf("Error in opening file\n");
-                                        		exit(-1);
-                                		}
-                                		write(emu_server,r,9*sizeof(char));
-                                		emu_client = open(src_emu_client,O_RDWR);
-                                		if (emu_client < 0){
-                                        		printf("Error in opening file\n");
-                                        		exit(-1);
-                                		}
-                                		char * bufff = malloc(28*sizeof(char));
-                                		read(emu_client, bufff, 28*sizeof(char));
-						write(fifo_client, bufff, 28*sizeof(char));
-                        			free(bufff);
-					}
-				}
-			}	
-		} else if (strcmp(args[0],"write")==0){
-			char *strVA;
-                        unsigned long va = strtoul(args[1], &strVA, 10);
-                        unsigned long pa = cse320_virt_to_phys(va);
-                        if (pa > 0xFFFFF000){
-                        } else {
-                                if (pa < myid * 256 || pa >= (myid + 1) * 256){
-                                        printf("error,address out of range");
-                                        writ = "writ_fail_";
-                                        write(fifo_client,writ,10*sizeof(char));
-                                } else {
-					char *w = "write,";
-					char *del = ",";
-					char *physADDR;
-					sprintf(physADDR,"%lu",pa);
-                                        strcat(w, physADDR);
-					strcat(w, del);
-					strcat(w, args[2]);
-                                        if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
-                                                printf("Emulated Memory not found\n");
-                                                exit(-1);
-                                        } else {
-                                                emu_server = open(src_emu_server,O_RDWR);
-                                                if (emu_server < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
-                                                }
-                                                write(emu_server,w,255*sizeof(char));
-                                                emu_client = open(src_emu_client,O_RDWR);
-                                                if (emu_client < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
-                                                }
-                                                char *bufff = malloc(28*sizeof(char));
-                                                read(emu_client, bufff, 28*sizeof(char));
-                                                write(fifo_client, bufff, 28*sizeof(char));
-                                        	free(bufff);
-					}
-				}
-			}	
 		} else {
-			printf("Error, invalid command\n");
+			char* token;
+                	int i = 0;
+                	char **args;
+                	for (token=strtok(buf," "); token != NULL; token=strtok(NULL, " ")){
+                        	printf("%s\n",token);
+				args[i] = strdup(token);
+                        	i += 1;
+                	}
+                	args[i] = NULL;
+			if (strcmp(args[0],"read")==0){
+				char *strVA;
+				unsigned long va = strtoul(args[1], &strVA, 10);
+				unsigned long pa = cse320_virt_to_phys(va);
+				if (pa > 0xFFFFF000){
+				} else {
+					if (pa < myid * 256 || pa >= (myid + 1)* 256){
+						printf("error,address out of range");
+						writ = "NULL";
+						write(fifo_client,writ,4*sizeof(char));
+					} else {
+						char *r = "read,";
+						char *physADDR;
+						sprintf(physADDR,"%lu",pa);
+						strcat(r, physADDR);
+						if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
+                                			printf("Emulated Memory not found\n");
+                                			exit(-1);
+                        			} else {
+                                			emu_server = open(src_emu_server,O_RDWR);
+                                			if (emu_server < 0){
+                                        			printf("Error in opening file\n");
+                                        			exit(-1);
+                                			}
+                                			write(emu_server,r,9*sizeof(char));
+                                			emu_client = open(src_emu_client,O_RDWR);
+                                			if (emu_client < 0){
+                                        			printf("Error in opening file\n");
+                                        			exit(-1);
+                                			}
+                                			char * bufff = malloc(28*sizeof(char));
+                                			read(emu_client, bufff, 28*sizeof(char));
+							write(fifo_client, bufff, 28*sizeof(char));
+                        				free(bufff);
+							close(emu_server);
+               						close(emu_client);
+						}
+					}
+				}
+				i -= 1;
+                        	while (i >= 0){
+                                	free(args[i]);
+                                	i -= 1;
+                        	}
+			} else if (strcmp(args[0],"write")==0){
+				char *strVA;
+                        	unsigned long va = strtoul(args[1], &strVA, 10);
+                        	unsigned long pa = cse320_virt_to_phys(va);
+                        	if (pa > 0xFFFFF000){
+                        	} else {
+                                	if (pa < myid * 256 || pa >= (myid + 1) * 256){
+                                        	printf("error,address out of range");
+                                        	writ = "writ_fail_";
+                                        	write(fifo_client,writ,10*sizeof(char));
+                                	} else {
+						char *w = "write,";
+						char *del = ",";
+						char *physADDR;
+						sprintf(physADDR,"%lu",pa);
+                                        	strcat(w, physADDR);
+						strcat(w, del);
+						strcat(w, args[2]);
+                                        	if (access(src_emu_server, F_OK) == -1 || access(src_emu_client, F_OK) == -1 ){
+                                                	printf("Emulated Memory not found\n");
+                                                	exit(-1);
+                                        	} else {
+                                                	emu_server = open(src_emu_server,O_RDWR);
+                                                	if (emu_server < 0){
+                                                        	printf("Error in opening file\n");
+                                                        	exit(-1);
+                                                	}
+                                                	write(emu_server,w,255*sizeof(char));
+                                                	emu_client = open(src_emu_client,O_RDWR);
+                                                	if (emu_client < 0){
+                                                        	printf("Error in opening file\n");
+                                                        	exit(-1);
+                                                	}
+                                                	char *bufff = malloc(28*sizeof(char));
+                                                	read(emu_client, bufff, 28*sizeof(char));
+                                                	write(fifo_client, bufff, 28*sizeof(char));
+							free(bufff);
+							close(emu_server);
+                					close(emu_client);		
+						}
+					}
+				}
+				i -= 1;
+				while (i >= 0){
+                        		free(args[i]);
+                                	i -= 1;
+                        	}
+			} else {
+                        	printf("Error, invalid command\n");
+                	}
 		}
-		i -= 1;
-                while (i >= 0){
-                	free(args[i]);
-                        i -= 1;
-                }
 		close(fifo_server);
         	close(fifo_client);
-        	close(emu_server);
-        	close(emu_client);
-		free(buf);
 	}	
 	kill:
 		pthread_exit(NULL);		
@@ -300,7 +303,7 @@ int main(int argc, char** argv){
                 	char src_client[80] = "fifo_client_";
 			char** args;
 			printf("> ");
-			fgets(str,255,stdin);
+			fgets(str,sizeof(str),stdin);
 			char* p = strchr(str,'\n');
                         if (p != NULL){
                                 str[p-str]='\0';
@@ -332,7 +335,7 @@ int main(int argc, char** argv){
 				printf("\nCurrently Running Processes: \n");
 				int j;
 				for (j = 0; j < 4; j++){
-					if (processes[j] > 0){
+					if (processes[j] != -1){
 						printf("Process ID: %lu\n",processes[j]);
 					}
 				}
@@ -372,8 +375,9 @@ int main(int argc, char** argv){
 								exit(-1);
 							}
 							bufff = malloc(10*sizeof(char));
+							sleep(2);
 							read(fifo_client, bufff, 10*sizeof(char));
-							if (strcmp(buf, "kill_succ_") == 0){
+							if (strcmp(bufff, "kill_succ_") == 0){
 								free(bufff);
 								unsigned long int rid = strtoul(tid, NULL, 10);
 								int t = 0;
@@ -390,6 +394,7 @@ int main(int argc, char** argv){
 						}
 					}	
 				} else if ( strcmp(args[0],"mem") == 0){
+					printf("Debug Message\n");
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
                                         } else {
@@ -411,8 +416,11 @@ int main(int argc, char** argv){
                                                                 exit(-1);
                                                         }
 							bufff = malloc(10*sizeof(char));
-                                                        read(fifo_client, bufff, 10*sizeof(char));
+							printf("hello from main\n");
+                                                        sleep(2);
+							read(fifo_client, bufff, 10*sizeof(char));
                                                         if (strcmp(bufff, "memo_succ_") == 0){
+								printf("Success\n");
                                                         } else {
                                                                 printf("Error in printing mem\n");
                                                         }

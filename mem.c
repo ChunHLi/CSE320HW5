@@ -11,11 +11,9 @@ int emu_client;
 int emu_server;
 char *src_emu_client = "emu_client";
 char *src_emu_server = "emu_server";
-char *buf;
 char *writ;
 void* ram;
 int thread_size[4] = {0,256,512,768};
-char **args;
 int status = 1;
 
 int main(int argc, char** argv){
@@ -30,24 +28,22 @@ int main(int argc, char** argv){
 	ram = calloc(1024, sizeof(char));
 	
 	while(status){
-		emu_server = open(src_emu_client,O_RDWR);
-		if (emu_server < 0){
-			printf("Error in opening file\n");
-			status = 0;
-			goto free;
-                }		
-		buf = malloc(255*sizeof(char));
-		read(emu_server, buf, 255*sizeof(char));
-		char* token;
+		char buf[255];
+		int emu_server = open(src_emu_server,O_RDWR);
+		read(emu_server,buf,sizeof(buf));
                 int i = 0;
-                for (token=strtok(buf,","); token != NULL; token=strtok(NULL, " ")){
-                        args[i] = strdup(token);
-                        i += 1;
+                char** args;
+		char* token
+                for (token=strtok(buf,","); token != NULL; token=strtok(NULL, ",")){
+                	args[i++] = strdup(token);
                 }
-                args[i] = NULL;
+		printf("%s\n",args[0]);
+		printf("%s\n",args[1]);
 		sleep(5);	
 		if (strcmp(args[0],"allo")==0){
+			printf("mem is indeed seeing this\n");
 			int id = atoi(args[1]);
+			printf("ID: %d\n",id);
 			char *physADDR;
 			sprintf(physADDR,"%d",thread_size[id]);
 			thread_size[id] = thread_size[id] + 4;
@@ -94,6 +90,7 @@ int main(int argc, char** argv){
                 	printf("Error in opening file\n");
                 	status = 0;
                 } else {
+			printf("%s\n",writ);
 			write(emu_client, writ, 28*sizeof(char));
 		}
 		i -= 1;
@@ -101,7 +98,6 @@ int main(int argc, char** argv){
                         free(args[i]);
                 	i -= 1;
                 } 
-		free(buf);
 		close(emu_server);
                 close(emu_client); 
 	}
