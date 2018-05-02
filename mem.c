@@ -88,6 +88,7 @@ int main(int argc, char** argv){
 			for (offset=0;offset<64;offset++){
 				((int*)ram)[pid*64+offset] = 0;
 			}
+			thread_size[pid] = pid * 256;
 		} else if (strcmp(args[0],"exit")==0){
                         printf("Exited\n");
                         status = 0;

@@ -35,21 +35,21 @@ unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char*
 		printf("%s\n",buf);
 		return -1;
 	}
-	int physAddr = atoi(buf);
+	//int physAddr = atoi(buf);
 	int i = 0;
 	for (i; i < 64 ;i++){
 		if (pt_2[i] < 512){
 			break;
 		}
 	}
-	pt_2[i] = (unsigned long)(512 + physAddr);
+	pt_2[i] = (unsigned long)(512 + i);
 	int j = 0;
 	for (j; j < 64; j++){
 		if (pt_1[j] < 512){
 			break;
 		}
 	}
-	pt_1[j] = (unsigned long)(512 + i);
+	pt_1[j] = (unsigned long)(512 + j);
 	unsigned long pt1 = pt_1[j];
 	pt1 = pt1 << 22;
 	unsigned long pt2 = pt_2[i];
@@ -59,7 +59,7 @@ unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char*
 	return va;                        
 }
 
-unsigned long cse320_virt_to_phys(unsigned long va){
+unsigned long cse320_virt_to_phys(unsigned long va, int myid){
 	if (va > 0xFFFFF000) {
 		printf("Invalid virtual address; address out of range");
 	} else {
@@ -67,9 +67,12 @@ unsigned long cse320_virt_to_phys(unsigned long va){
 		if (pa < 512){
 			printf("Address not allocated\n");
 		} else {
-			return (pa - 512);
+			pa -= 512;
+			pa = pa + 256*myid;
+			return pa;
 		}
 	}
+	//printf("Physical Address: %lu\n",pa);
 	return -1;
 }
 
@@ -189,7 +192,7 @@ void *thread_func(void *vargp){
 			if (strcmp(args[0],"read")==0){
 				printf("what?\n");
 				unsigned long va = strtoul(args[1], NULL, 10);
-				unsigned long pa = cse320_virt_to_phys(va);
+				unsigned long pa = cse320_virt_to_phys(va,myid);
 				if (pa > 0xFFFFF000){
 				} else {
 					if (pa < myid * 256 || pa >= (myid + 1)* 256){
@@ -234,7 +237,7 @@ void *thread_func(void *vargp){
 				}
 			} else if (strcmp(args[0],"write")==0){
                         	unsigned long va = strtoul(args[1], NULL, 10);
-                        	unsigned long pa = cse320_virt_to_phys(va);
+                        	unsigned long pa = cse320_virt_to_phys(va,myid);
                         	if (pa > 0xFFFFF000 != pa == 0xFFFFFFFFF){
                         	} else {
                                 	if (pa < myid * 256 || pa >= (myid + 1) * 256){
