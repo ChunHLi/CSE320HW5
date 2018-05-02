@@ -26,36 +26,38 @@ int main(int argc, char** argv){
         	printf("Unable to create fifo to emulated mem, may already exists\n");
         }
 	ram = calloc(1024, sizeof(char));
-	
+	char* buf = (char*)malloc(80*sizeof(char));
 	while(status){
-		char buf[255];
-		emu_server = open(src_emu_server,O_RDWR);
-		read(emu_server,buf,sizeof(buf));
-		
-		printf("%s has a length of %lu\n",buf,strlen(buf));
+		emu_server = open(src_emu_server,O_RDONLY);
+		read(emu_server,buf,80);
+		close(emu_server);
+		sleep(5);
+		printf("passed sleep?\n");
+		printf("%s\n",buf);
                 int i = 0;
-                char** args = (char**)malloc(3*sizeof(char*));
+                char** args = (char**)calloc(4,sizeof(char*));
 		int a;
-		for (a = 0; a<3 ;a++){
-			args[a]= (char *)malloc(32*sizeof(char));
+		for (a = 0; a<4 ;a++){
+			args[a]= (char *)calloc(32,sizeof(char));
 		}
-		char* token;
-                for (token=strtok(buf,","); token != NULL; token=strtok(NULL, ",")){
-			printf("token: %s has length of %lu\n",token,strlen(token));
-                	args[i++] = strdup(token);
+		char* token = strtok(buf,",");
+                while (token != NULL){
+                        args[i++] = strdup(token);
+                        token = strtok(NULL, ",");
                 }
-		printf("made it out of forward loop\n");
-		sleep(5);	
+		printf("args[0]: %s\n",args[0]);
+		printf("args[1]: %s\n",args[1]);
 		if (strcmp(args[0],"allo")==0){
-			printf("mem is indeed seeing this\n");
 			int id = atoi(args[1]);
-			printf("ID: %d\n",id);
-			char *physADDR;
+			char physADDR[4];
+			printf("Before sprintf\n");
 			sprintf(physADDR,"%d",thread_size[id]);
+			printf("Past sprintf\n");
 			thread_size[id] = thread_size[id] + 4;
 			writ = physADDR;
+			printf("Got up to here somehow\n");
 		} else if (strcmp(args[0],"read")==0 || strcmp(args[0],"write")==0){
-			char *strADDR = args[1];
+			char* strADDR = args[1];
 			int intADDR = atoi(strADDR);
 			if (intADDR >= 1024){
 				writ = "error,address out of range";
@@ -70,12 +72,13 @@ int main(int argc, char** argv){
 				}
 				if (strcmp(args[0],"read")==0){
 					int value = ((int*)ram)[intADDR/4];
-                                	char * strValue;
+                                	char strValue[16];
                                 	sprintf(strValue,"%d",value);
                                 	writ = strValue;
 				} else {
 					int val = atoi(args[2]);
                                 	((int*)ram)[intADDR / 4] = val;
+					printf("Value: %d\n",((int*)ram)[intADDR/4]);
                                 	writ = "writ_succ_";
 				}
 			}
@@ -87,26 +90,27 @@ int main(int argc, char** argv){
 			}
 		} else if (strcmp(args[0],"exit")==0){
                         printf("Exited\n");
-                        status = 0;	
+                        status = 0;
+			goto free;	
 		} else {
 			printf("Error, invalid command\n");
 		}
-		emu_client = open(src_emu_client,O_RDWR);
+		emu_client = open(src_emu_client,O_WRONLY);
                 if (emu_client < 0){
                 	printf("Error in opening file\n");
                 	status = 0;
-                } else {
-			printf("%s\n",writ);
-			write(emu_client, writ, 28*sizeof(char));
 		}
-		i -= 1;
-                while (i >= 0){
+		write(emu_client, writ, 28*sizeof(char));
+		close(emu_client);
+		i = 0;
+                while (i < 4){
                         free(args[i]);
-                	i -= 1;
-                } 
-		close(emu_server);
-                close(emu_client); 
+                	i += 1;
+                }
+		free(args);
+		memset(buf,0,80); 
 	}
 	free:
+	free(buf);
 	free(ram);
 }
