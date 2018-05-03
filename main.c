@@ -30,12 +30,10 @@ unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char*
         char* buf = calloc(28,sizeof(char));
         read(emu_client, buf, 4*sizeof(char));
 	close(emu_client);
-	printf("Physical Addr: %s\n", buf);
 	if (strcmp(buf,"error,address out of range")==0 || strcmp(buf,"error,address is not aligned")==0){
 		printf("%s\n",buf);
 		return -1;
 	}
-	//int physAddr = atoi(buf);
 	int i = 0;
 	for (i; i < 64 ;i++){
 		if (pt_2[i] < 512){
@@ -68,11 +66,10 @@ unsigned long cse320_virt_to_phys(unsigned long va, int myid){
 			printf("Address not allocated\n");
 		} else {
 			pa -= 512;
-			pa = pa + 256*myid;
+			pa = pa*4 + 256*myid;
 			return pa;
 		}
 	}
-	//printf("Physical Address: %lu\n",pa);
 	return -1;
 }
 
@@ -109,17 +106,17 @@ void *thread_func(void *vargp){
 	strcat(src_server, id);
 	char src_client[80] = "fifo_client_";
 	strcat(src_client, id);	
+	char buf[80] = "hm";
 	while (1) {
 		char* writ;
 		fifo_server = open(src_server,O_RDONLY);
 		if (fifo_server<0) {
 			printf("Error opening file\n");
 		}
-                char* buf = (char*)calloc(80,sizeof(char));
+                memset(buf,0,80);
 		read(fifo_server,buf,80*sizeof(char));
 		close(fifo_server);
 		if (strcmp(buf,"kill")==0){
-			printf("Process Index: %s\n",sid);
 			writ = "kill_succ_";
 			printf("Process Killed");
 			char k[6] = "kill,";
@@ -131,6 +128,14 @@ void *thread_func(void *vargp){
                         }
                         write(emu_server,k,6*sizeof(char));
 			close(emu_server);
+			char *l = (char*)calloc(3,sizeof(char));
+			emu_client = open(src_emu_client, O_RDONLY);
+			if (emu_client < 0){
+				printf("Error in opening file\n");
+				exit(-1);
+			}
+			read(emu_client,l,3*sizeof(char));
+			close(emu_client);
 			fifo_client = open(src_client, O_WRONLY);
                 	if (fifo_client<0) {
                         	printf("Error opening file\n");
@@ -154,7 +159,6 @@ void *thread_func(void *vargp){
 		} else if (strcmp(buf,"allo")==0){
 			unsigned long va = cse320_malloc(pt_1,pt_2,sid);
 			if (va == 0xFFFFFFFF) {
-				printf("allo_fail_: %lu\n", va);
 				writ = "allo_fail_";
 				fifo_client = open(src_client, O_WRONLY);
                         	if (fifo_client<0) {
@@ -163,7 +167,6 @@ void *thread_func(void *vargp){
 				write(fifo_client,writ,10*sizeof(char));
 				close(fifo_client);		
 			} else {
-				printf("allo_succ_: %lu\n", va);
 				writ = "allo_succ_";
 				virt_addr[virt_len] = va;
 				virt_len += 1;
@@ -175,7 +178,6 @@ void *thread_func(void *vargp){
 				close(fifo_client);
 			}
 		} else {
-			printf("Most recent addition: %s\n",buf);
 			int i = 0;
 			char** args = (char**)calloc(4,sizeof(char*));
                         int a;
@@ -187,97 +189,127 @@ void *thread_func(void *vargp){
                                 args[i++] = strdup(token);
                         	token = strtok(NULL, " ");
                         }
-			printf("args[0]: %s\n",args[0]);
-			printf("args[1]: %s\n",args[1]);
 			if (strcmp(args[0],"read")==0){
-				printf("what?\n");
 				unsigned long va = strtoul(args[1], NULL, 10);
-				unsigned long pa = cse320_virt_to_phys(va,myid);
-				if (pa > 0xFFFFF000){
-				} else {
-					if (pa < myid * 256 || pa >= (myid + 1)* 256){
-						printf("error,address out of range");
-						writ = "NULL";
-						fifo_client = open(src_client, O_WRONLY);
-                        			if (fifo_client<0) {
-                                			printf("Error opening file\n");
-                        			}
-						write(fifo_client,writ,4*sizeof(char));
-						close(fifo_client);
+				int read_check=0;
+				int x;
+				for (x = 0; x < virt_len ;x++){
+					if (va == virt_addr[x]){
+						read_check = 1;
+					}	
+				}
+				if (read_check){
+					unsigned long pa = cse320_virt_to_phys(va,myid);
+					if (pa > 0xFFFFF000 || pa == 0xFFFFFFFF){
 					} else {
-						char r[10] = "read,";
-						char physADDR[4];
-						sprintf(physADDR,"%lu",pa);
-						strcat(r, physADDR);
-						printf("Sending to mem: %s\n", r);
-                                		emu_server = open(src_emu_server,O_WRONLY);
-                                		if (emu_server < 0){
-                                        		printf("Error in opening file\n");
-                                        		exit(-1);
-                                		}
-                                		write(emu_server,r,10*sizeof(char));
-						close(emu_server);
-						printf("Wrote to mem\n");
-                                		char* bufff = (char*)calloc(28,sizeof(char));
-						emu_client = open(src_emu_client,O_RDONLY);
-                                                if (emu_client < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
-                                                }
-                                		read(emu_client, bufff, 28*sizeof(char));
-						close(emu_client);
-						fifo_client = open(src_client, O_WRONLY);
-                        			if (fifo_client<0) {
-                                			printf("Error opening file\n");
-                        			}
-						write(fifo_client, bufff, 28*sizeof(char));
-						close(fifo_client);
-                        			free(bufff);
+						if (pa < myid * 256 || pa >= (myid + 1)* 256){
+							printf("error,address out of range");
+							writ = "NULL";
+							fifo_client = open(src_client, O_WRONLY);
+                        				if (fifo_client<0) {
+                                				printf("Error opening file\n");
+                        				}
+							write(fifo_client,writ,4*sizeof(char));
+							close(fifo_client);
+						} else {
+							char r[10] = "read,";
+							char physADDR[4];
+							sprintf(physADDR,"%lu",pa);
+							strcat(r, physADDR);
+                                			emu_server = open(src_emu_server,O_WRONLY);
+                                			if (emu_server < 0){
+                                        			printf("Error in opening file\n");
+                                        			exit(-1);
+                                			}
+                                			write(emu_server,r,10*sizeof(char));
+							close(emu_server);
+                                			char* bufff = (char*)calloc(28,sizeof(char));
+							emu_client = open(src_emu_client,O_RDONLY);
+                                                	if (emu_client < 0){
+                                                        	printf("Error in opening file\n");
+                                                        	exit(-1);
+                                                	}
+                                			read(emu_client, bufff, 28*sizeof(char));
+							close(emu_client);
+							fifo_client = open(src_client, O_WRONLY);
+                        				if (fifo_client<0) {
+                                				printf("Error opening file\n");
+                        				}
+							write(fifo_client, bufff, 28*sizeof(char));
+							close(fifo_client);
+                        				free(bufff);
+						}
 					}
+				} else {
+					printf("error,address out of range or unaligned");
+					writ = "NULL";
+                                        fifo_client = open(src_client, O_WRONLY);
+                                        if (fifo_client<0) {
+                                        	printf("Error opening file\n");
+                                        }
+                                        write(fifo_client,writ,4*sizeof(char));
+                                        close(fifo_client);
 				}
 			} else if (strcmp(args[0],"write")==0){
                         	unsigned long va = strtoul(args[1], NULL, 10);
-                        	unsigned long pa = cse320_virt_to_phys(va,myid);
-                        	if (pa > 0xFFFFF000 != pa == 0xFFFFFFFFF){
-                        	} else {
-                                	if (pa < myid * 256 || pa >= (myid + 1) * 256){
-                                        	printf("error,address out of range");
-                                        	writ = "writ_fail_";
-                                        	write(fifo_client,writ,10*sizeof(char));
-						close(fifo_client);
-                                	} else {
-						char w[32] = "write,";
-						char* del = ",";
-						char physADDR[4];
-						sprintf(physADDR,"%lu",pa);
-                                        	strcat(w, physADDR);
-						strcat(w, del);
-						strcat(w, args[2]);
-						printf("Sending: %s\n",w);
-                                                emu_server = open(src_emu_server,O_WRONLY);
-                                                if (emu_server < 0){
-                                                       	printf("Error in opening file\n");
-                                                       	exit(-1);
-                                                }
-                                                write(emu_server,w,32*sizeof(char));
-						close(emu_server);
-						char* bufff =  (char*)calloc(28,sizeof(char));
-                                                emu_client = open(src_emu_client,O_RDONLY);
-                                                if (emu_client < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
-                                                }
-                                                read(emu_client, bufff, 28*sizeof(char));
-						close(emu_client);
-						fifo_client = open(src_client, O_WRONLY);
-						if (fifo_client < 0){
-							printf("Error in opening file\n");
-							exit(-1);
+				int write_check=0;
+                                int y;
+                                for (y = 0; y < virt_len ;y++){
+                                        if (va == virt_addr[y]){
+                                                write_check = 1;
+                                        }       
+                                }
+                                if (write_check){
+                        		unsigned long pa = cse320_virt_to_phys(va,myid);
+                        		if (pa > 0xFFFFF000 || pa == 0xFFFFFFFFF){
+                        		} else {
+                                		if (pa < myid * 256 || pa >= (myid + 1) * 256){
+                                        		printf("error,address out of range");
+                                        		writ = "writ_fail_";
+                                        		write(fifo_client,writ,10*sizeof(char));
+							close(fifo_client);
+                                		} else {
+							char w[32] = "write,";
+							char* del = ",";
+							char physADDR[4];
+							sprintf(physADDR,"%lu",pa);
+                                        		strcat(w, physADDR);
+							strcat(w, del);
+							strcat(w, args[2]);
+                                                	emu_server = open(src_emu_server,O_WRONLY);
+                                                	if (emu_server < 0){
+                                                       		printf("Error in opening file\n");
+                                                       		exit(-1);
+                                                	}
+                                                	write(emu_server,w,32*sizeof(char));
+							close(emu_server);
+							char* bufff =  (char*)calloc(28,sizeof(char));
+                                                	emu_client = open(src_emu_client,O_RDONLY);
+                                                	if (emu_client < 0){
+                                                        	printf("Error in opening file\n");
+                                                        	exit(-1);
+                                                	}
+                                                	read(emu_client, bufff, 28*sizeof(char));
+							close(emu_client);
+							fifo_client = open(src_client, O_WRONLY);
+							if (fifo_client < 0){
+								printf("Error in opening file\n");
+								exit(-1);
+							}
+                                                	write(fifo_client, bufff, 28*sizeof(char));
+							close(fifo_client);
+							free(bufff);		
 						}
-                                                write(fifo_client, bufff, 28*sizeof(char));
-						close(fifo_client);
-						free(bufff);		
 					}
+				} else {
+					printf("error,address out of range or unaligned\n");
+                                        writ = "writ_fail_";
+                                        fifo_client = open(src_client, O_WRONLY);
+                                        if (fifo_client<0) {
+                                                printf("Error opening file\n");
+                                        }
+                                        write(fifo_client,writ,10*sizeof(char));
+                                        close(fifo_client);
 				}
 			} else {
                         	printf("Error, invalid command\n");
@@ -288,7 +320,6 @@ void *thread_func(void *vargp){
                                 i += 1;
                         }
 			free(args);
-			free(buf);
 		}
 	}	
 	kill:
@@ -337,18 +368,22 @@ int main(int argc, char** argv){
 						strcat(src_server, s);
 						int thread_process = mkfifo(src_server, S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 						if (thread_process < 0){
-							printf("Unable to create a fifo, may have been created already\n");
+							printf("Unable to create thread pipe, may exist already\n");
 						}
 						char c[80];
 						sprintf(c,"%lu",processes[d]);
 						strcat(src_client, c);
 						int main_process = mkfifo(src_client,S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
 						if (main_process < 0){
-							printf("Unable to create a fifo, may have been created already\n");
+							printf("Unable to create thread pipe, may exist already\n");
 						}
 						break;
 					}
+					if (d==3){
+						printf("Unable to create thread, max num threads made\n");
+					}
 				}
+				printf("End of create\n");		
 			} else if ( strcmp(str,"list") == 0){
 				printf("\nCurrently Running Processes: \n");
 				int j;
@@ -357,8 +392,16 @@ int main(int argc, char** argv){
 						printf("Process ID: %lu\n",processes[j]);
 					}
 				}
+				printf("End of list\n");
 			} else if ( strcmp(str,"exit") == 0){
 				char* e = "exit";
+				int ptid;
+				for (ptid=0;ptid<4;ptid++){
+					if (processes[ptid] != -1){
+						pthread_cancel(processes[ptid]);
+						pthread_join(processes[ptid],NULL);
+					}
+				}
 				emu_server = open(src_emu_server,O_WRONLY);
                                 write(emu_server,e,4*sizeof(char));
 				close(emu_server);
@@ -384,16 +427,19 @@ int main(int argc, char** argv){
 						strcat(src_client,tid);
 						fifo_server = open(src_server,O_WRONLY);
 						if (fifo_server < 0){
-							printf("Error in opening file\n");
-							exit(-1);
+							printf("Error, process can't be found\n");
+							close(fifo_server);
+							goto kill_end;
 						}
 						write(fifo_server, "kill",4*sizeof(char));
 						close(fifo_server);
 						char* bufff = malloc(10*sizeof(char));
 						fifo_client = open(src_client,O_RDONLY);
 						if (fifo_client < 0){
-							printf("Error in opening file\n");
-							exit(-1);
+							printf("Error, process can't be found\n");
+							close(fifo_client);
+							free(bufff);
+							goto kill_end;
 						}
 						read(fifo_client, bufff, 10*sizeof(char));
 						close(fifo_client);
@@ -403,7 +449,8 @@ int main(int argc, char** argv){
 							int t = 0;
 							for (t; t < 4;t++){
 								if (((unsigned long int)processes[t]) == rid){
-									processes[t] = -1;
+									pthread_join(processes[t],NULL);
+									processes[t]=-1;
 								}	
 							}
 						} else {
@@ -411,9 +458,11 @@ int main(int argc, char** argv){
 							free(bufff);
 							exit(-1);
 						}
+						kill_end:
+						
+						printf("End of kill\n");
 					}	
 				} else if ( strcmp(args[0],"mem") == 0){
-					printf("Debug Message\n");
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
                                         } else {
@@ -422,16 +471,18 @@ int main(int argc, char** argv){
                                                 strcat(src_client,tid);
                                                 fifo_server = open(src_server,O_WRONLY);
                                                 if (fifo_server < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
+                                                        printf("Error, process cannot be found\n");
+                                                        close(fifo_server);
+							goto mem_end;
                                                 }
                                                 write(fifo_server, "memo",4*sizeof(char));
 						close(fifo_server);
 						char* bufff = malloc(10*sizeof(char));
 						fifo_client = open(src_client,O_RDONLY);
                                                 if (fifo_client < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
+                                                        printf("Error, process cannot be found\n");
+                                                        close(fifo_client);
+							goto mem_end;
                                                 }
 						read(fifo_client, bufff, 10*sizeof(char));
 						close(fifo_client);
@@ -441,28 +492,29 @@ int main(int argc, char** argv){
                                                         printf("Error in printing mem\n");
                                                 }
 						free(bufff);
+						mem_end:
+						printf("End of mem\n");
                                         }
 				} else if ( strcmp(args[0],"allocate") == 0){
 					if (i != 2){
                                                 printf("Invalid number of arguments: Expected 2\n");
 					} else {
                                                 char* tid = args[1];
-						printf("tid : %s\n", tid);
                                                 strcat(src_server,tid);
                                                 strcat(src_client,tid);
-						printf("server filename: %s\n", src_server);
-						printf("client filename: %s\n", src_client);
                                                 fifo_server = open(src_server,O_WRONLY);
                                                 if (fifo_server < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
+                                                        printf("Error, process cannot be found\n");
+                                                        close(fifo_server);
+							goto allo_end;
                                                 }
                                                 write(fifo_server, "allo",4*sizeof(char));
 						close(fifo_server);
 						fifo_client = open(src_client,O_RDONLY);
                                                 if (fifo_client < 0){
-                                                	printf("Error in opening file\n");
-                                                        exit(-1);
+                                                	printf("Error, process cannot be found\n");
+                                                        close(fifo_client);
+							goto allo_end;
                                                 }
 						char* bufff = malloc(10*sizeof(char));
                                                 read(fifo_client, bufff, 10*sizeof(char));
@@ -475,6 +527,8 @@ int main(int argc, char** argv){
                                                         free(bufff);
                                                         exit(-1);
                                                 }
+						allo_end:
+						printf("End of allo\n");
                                         }
 				} else if ( strcmp(args[0],"read") == 0){
 					if (i != 3){
@@ -485,26 +539,28 @@ int main(int argc, char** argv){
                                                 strcat(src_client,tid);
                                                 fifo_server = open(src_server,O_WRONLY);
                                                 if (fifo_server < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
+                                                        printf("Error, process cannot be found\n");
+							close(fifo_server);
+							goto read_end;
                                                 }	
 						char cmdr[64] = "read ";
 						char* virt_addrr = args[2];
 						strcat(cmdr, virt_addrr);
-						printf("What am I reading in?: %s\n",cmdr);
                                                 write(fifo_server, cmdr,strlen(cmdr)*sizeof(char));
 						close(fifo_server);
-						printf("Did it get up to here? YES\n");
 						fifo_client = open(src_client,O_RDONLY);
                                                 if (fifo_client < 0){
-                                                	printf("Error in opening file\n");
-                                                        exit(-1);
+                                                	printf("Error, process cannot be found\n");
+                                                        close(fifo_client);
+							goto read_end;
                                                 }
                                                 char* bufff = malloc(11*sizeof(char));
                                                 read(fifo_client, bufff, 11*sizeof(char));
 						close(fifo_client);
                                                 printf("Value: %s\n",bufff);
                                                 free(bufff);
+						read_end:
+						printf("End of read\n");
                                         }
 				} else if ( strcmp(args[0],"write") == 0){
 					if (i != 4){
@@ -522,16 +578,19 @@ int main(int argc, char** argv){
                                                 strcat(cmdw, value);
                                                 fifo_server = open(src_server,O_WRONLY);
                                                 if (fifo_server < 0){
-                                                        printf("Error in opening file\n");
-                                                        exit(-1);
+                                                        printf("Error, process cannot be found\n");
+                                                        close(fifo_server);
+							goto write_end;
                                                	}
                                                	write(fifo_server, cmdw,strlen(cmdw)*sizeof(char));
 						close(fifo_server);
 						char* bufff = malloc(10*sizeof(char));
 						fifo_client = open(src_client,O_RDONLY);
                                                 if (fifo_client < 0){
-                                                	printf("Error in opening file\n");
-                                                        exit(-1);
+                                                	printf("Error, process cannot be found\n");
+                                                        close(fifo_client);
+							free(bufff);
+							goto write_end;
                                                 }
                                                 read(fifo_client, bufff, 10*sizeof(char));
 						close(fifo_client);
@@ -543,6 +602,8 @@ int main(int argc, char** argv){
                                                         free(bufff);
                                                        	exit(-1);
                                                 }
+						write_end:
+						printf("End of write\n");
                                         }
 				} else {
 					printf("Invalid command: %s not recognized\n", args[0]);

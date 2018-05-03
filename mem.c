@@ -32,8 +32,6 @@ int main(int argc, char** argv){
 		read(emu_server,buf,80);
 		close(emu_server);
 		sleep(5);
-		printf("passed sleep?\n");
-		printf("%s\n",buf);
                 int i = 0;
                 char** args = (char**)calloc(4,sizeof(char*));
 		int a;
@@ -45,8 +43,6 @@ int main(int argc, char** argv){
                         args[i++] = strdup(token);
                         token = strtok(NULL, ",");
                 }
-		printf("args[0]: %s\n",args[0]);
-		printf("args[1]: %s\n",args[1]);
 		if (strcmp(args[0],"allo")==0){
 			int id = atoi(args[1]);
 			char physADDR[4];
@@ -89,6 +85,7 @@ int main(int argc, char** argv){
 				((int*)ram)[pid*64+offset] = 0;
 			}
 			thread_size[pid] = pid * 256;
+			writ = "rip";
 		} else if (strcmp(args[0],"exit")==0){
                         printf("Exited\n");
                         status = 0;
