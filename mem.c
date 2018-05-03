@@ -46,12 +46,9 @@ int main(int argc, char** argv){
 		if (strcmp(args[0],"allo")==0){
 			int id = atoi(args[1]);
 			char physADDR[4];
-			printf("Before sprintf\n");
 			sprintf(physADDR,"%d",thread_size[id]);
-			printf("Past sprintf\n");
 			thread_size[id] = thread_size[id] + 4;
 			writ = physADDR;
-			printf("Got up to here somehow\n");
 		} else if (strcmp(args[0],"read")==0 || strcmp(args[0],"write")==0){
 			char* strADDR = args[1];
 			int intADDR = atoi(strADDR);
@@ -68,14 +65,15 @@ int main(int argc, char** argv){
 				}
 				if (strcmp(args[0],"read")==0){
 					int value = ((int*)ram)[intADDR/4];
-                                	char strValue[16];
-                                	sprintf(strValue,"%d",value);
-                                	writ = strValue;
+                                	char readValue[16];
+                                	sprintf(readValue,"%d",value);
+                                	writ = readValue;
 				} else {
 					int val = atoi(args[2]);
                                 	((int*)ram)[intADDR / 4] = val;
-					printf("Value: %d\n",((int*)ram)[intADDR/4]);
-                                	writ = "writ_succ_";
+					char writeValue[16];
+					sprintf(writeValue,"%d",val);
+                                	writ = writeValue;
 				}
 			}
 		} else if (strcmp(args[0],"kill")==0){

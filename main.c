@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 pthread_t processes[4] = {-1,-1,-1,-1};
+int cache[4][2] = {{-1,-1},{-1,-1},{-1,-1},{-1,-1}};
 
 unsigned long cse320_malloc(unsigned long pt_1[64], unsigned long pt_2[64],char* myid){
 	char* src_server = "emu_server";
@@ -142,6 +143,13 @@ void *thread_func(void *vargp){
                 	}
 			write(fifo_client,writ,10*sizeof(char));
         		close(fifo_client);
+			int kc;
+			for (kc=0;kc<4;kc++){
+				if ((cache[kc][0] >= myid*256) && (cache[kc][0] < (myid+1)*256)){
+					cache[kc][0] = -1;
+					cache[kc][1] = -1;
+				}
+			}
 			goto kill;
                 } else if (strcmp(buf,"memo")==0){
 			writ = "memo_succ_";
@@ -212,32 +220,53 @@ void *thread_func(void *vargp){
 							write(fifo_client,writ,4*sizeof(char));
 							close(fifo_client);
 						} else {
-							char r[10] = "read,";
-							char physADDR[4];
-							sprintf(physADDR,"%lu",pa);
-							strcat(r, physADDR);
-                                			emu_server = open(src_emu_server,O_WRONLY);
-                                			if (emu_server < 0){
-                                        			printf("Error in opening file\n");
-                                        			exit(-1);
-                                			}
-                                			write(emu_server,r,10*sizeof(char));
-							close(emu_server);
-                                			char* bufff = (char*)calloc(28,sizeof(char));
-							emu_client = open(src_emu_client,O_RDONLY);
-                                                	if (emu_client < 0){
-                                                        	printf("Error in opening file\n");
-                                                        	exit(-1);
-                                                	}
-                                			read(emu_client, bufff, 28*sizeof(char));
-							close(emu_client);
-							fifo_client = open(src_client, O_WRONLY);
-                        				if (fifo_client<0) {
-                                				printf("Error opening file\n");
-                        				}
-							write(fifo_client, bufff, 28*sizeof(char));
-							close(fifo_client);
-                        				free(bufff);
+							int inCache = 0;
+							int c;
+							for (c=0;c<4;c++){
+								if (cache[c][0] == pa){
+									inCache = 1;
+									break;
+								}
+							}
+							char* bufff = (char*)calloc(28,sizeof(char));
+							if (inCache){
+								printf("cache hit");
+								sprintf(bufff,"%d",cache[c][1]);
+								fifo_client = open(src_client, O_WRONLY);
+                                                                if (fifo_client<0) {
+                                                                        printf("Error opening file\n");
+                                                                }
+                                                                write(fifo_client, bufff, 28*sizeof(char));
+                                                                close(fifo_client);
+							} else {
+								printf("cache miss\n");
+								char r[10] = "read,";
+								char physADDR[4];
+								sprintf(physADDR,"%lu",pa);
+								strcat(r, physADDR);
+                                				emu_server = open(src_emu_server,O_WRONLY);
+                                				if (emu_server < 0){
+                                        				printf("Error in opening file\n");
+                                        				exit(-1);
+                                				}
+                                				write(emu_server,r,10*sizeof(char));
+								close(emu_server);
+                                				char* bufff = (char*)calloc(28,sizeof(char));
+								emu_client = open(src_emu_client,O_RDONLY);
+                                                		if (emu_client < 0){
+                                                        		printf("Error in opening file\n");
+                                                        		exit(-1);
+                                                		}
+                                				read(emu_client, bufff, 28*sizeof(char));
+								close(emu_client);
+								fifo_client = open(src_client, O_WRONLY);
+                        					if (fifo_client<0) {
+                                					printf("Error opening file\n");
+                        					}
+								write(fifo_client, bufff, 28*sizeof(char));
+								close(fifo_client);
+							}
+							free(bufff);
 						}
 					}
 				} else {
@@ -291,6 +320,27 @@ void *thread_func(void *vargp){
                                                 	}
                                                 	read(emu_client, bufff, 28*sizeof(char));
 							close(emu_client);
+							if (strlen(bufff)<16){
+								int w;
+								for (w=0;w<4;w++){
+									if (cache[w][0] == -1 || cache[w][0] == pa){
+										if (cache[w][0]==-1){
+											printf("cache miss\n");
+										} else {
+											printf("cache hit\n");
+										}
+										cache[w][0] = pa;
+										cache[w][1] = atoi(bufff);
+										break;
+									}
+									if (w==3){
+										printf("cache miss\n");
+										int val = atoi(bufff);
+										cache[val%4][0] = pa;
+										cache[val%4][1] = val;
+									}
+								}
+							}
 							fifo_client = open(src_client, O_WRONLY);
 							if (fifo_client < 0){
 								printf("Error in opening file\n");
@@ -487,7 +537,6 @@ int main(int argc, char** argv){
 						read(fifo_client, bufff, 10*sizeof(char));
 						close(fifo_client);
                                                 if (strcmp(bufff, "memo_succ_") == 0){
-							printf("Success\n");
                                                 } else {
                                                         printf("Error in printing mem\n");
                                                 }
@@ -554,8 +603,8 @@ int main(int argc, char** argv){
                                                         close(fifo_client);
 							goto read_end;
                                                 }
-                                                char* bufff = malloc(11*sizeof(char));
-                                                read(fifo_client, bufff, 11*sizeof(char));
+                                                char* bufff = malloc(28*sizeof(char));
+                                                read(fifo_client, bufff, 28*sizeof(char));
 						close(fifo_client);
                                                 printf("Value: %s\n",bufff);
                                                 free(bufff);
@@ -595,7 +644,7 @@ int main(int argc, char** argv){
                                                 read(fifo_client, bufff, 10*sizeof(char));
 						close(fifo_client);
 						printf("%s\n",bufff);
-                                                if (strcmp(bufff, "writ_succ_") == 0){
+                                                if (strlen(bufff) < 20){
 							free(bufff);
                                                 } else {
                                                         printf("Error in writing\n");
