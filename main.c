@@ -333,8 +333,8 @@ void *thread_func(void *vargp){
 										cache[w][1] = atoi(bufff);
 										break;
 									}
-									if (w==3){
-										printf("cache miss\n");
+									if (w==3 && cache[w][0] != -1){
+										printf("line eviction\n");
 										int val = atoi(bufff);
 										cache[val%4][0] = pa;
 										cache[val%4][1] = val;
